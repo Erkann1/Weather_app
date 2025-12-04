@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { RefreshCcw, Bell, CloudRain, Sun, Zap, Sunrise, ToggleLeft, ToggleRight, AlertTriangle } from 'lucide-react';
+import { CapacitorForegroundService } from 'capacitor-foreground-service';
 
 import { TURKEY_LOCATIONS } from './data/turkey_locations';
 
@@ -364,8 +365,29 @@ function App() {
   useEffect(() => {
     if (!isSchedulerActive) {
       setStatusMessage("Otomatik anons durduruldu.");
+      // Servisi durdur
+      try {
+        CapacitorForegroundService.stop();
+      } catch (e) { console.error("Servis durdurma hatası:", e); }
       return;
     }
+
+    // Servisi başlat
+    const startService = async () => {
+      try {
+        await CapacitorForegroundService.start({
+          id: 123,
+          title: "Sabah Anonsu",
+          body: "Otomatik anons servisi çalışıyor...",
+          icon: "ic_launcher",
+          smallIcon: "ic_launcher",
+          button: false
+        });
+      } catch (e) {
+        console.error("Servis başlatma hatası:", e);
+      }
+    };
+    startService();
 
     const checkTimeAndAnnounce = () => {
       const now = new Date();
