@@ -1,18 +1,18 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { RefreshCcw, Bell, CloudRain, Sun, Zap, Sunrise, ToggleLeft, ToggleRight, AlertTriangle } from 'lucide-react';
 
+import { TURKEY_LOCATIONS } from './data/turkey_locations';
+
 // Sabitler
 const OPENMETEO_URL = "https://api.open-meteo.com/v1/forecast";
+const GEOCODING_URL = "https://geocoding-api.open-meteo.com/v1/search";
 
-// SADELEŞTİRİLDİ: Sadece Derince ve Gebze koordinatları sabit olarak kullanılıyor.
-const CITIES = [
-  { name: "Derince", lat: 40.7569, lon: 29.8147 },
-  { name: "Gebze", lat: 40.8033, lon: 29.4328 }
-];
-
-// Varsayılan saat sabit olarak 06:15
-const TARGET_TIME_HOUR = 6;
-const TARGET_TIME_MINUTE = 15;
+// Varsayılan değerler
+const DEFAULT_PROVINCE = "Kocaeli";
+const DEFAULT_DISTRICT = "Derince";
+const DEFAULT_LAT = 40.7569;
+const DEFAULT_LON = 29.8147;
+const DEFAULT_TIME = "06:15";
 
 // API Entegrasyonları için sabitler
 // GÜNCELLEME: Yeni Gemini API Anahtarı gizlendi.
@@ -147,67 +147,95 @@ function App() {
   const [lastAnnounceTime, setLastAnnounceTime] = useState(null);
   const [isSchedulerActive, setIsSchedulerActive] = useState(true);
 
-  // SABİT SAAT KULLANILDI
-  const targetHour = TARGET_TIME_HOUR;
-  const targetMinute = TARGET_TIME_MINUTE;
+  // Yeni State'ler
+  const [targetTime, setTargetTime] = useState(DEFAULT_TIME);
+  const [selectedProvince, setSelectedProvince] = useState(DEFAULT_PROVINCE);
+  const [selectedDistrict, setSelectedDistrict] = useState(DEFAULT_DISTRICT);
+  const [coordinates, setCoordinates] = useState({ lat: DEFAULT_LAT, lon: DEFAULT_LON });
+
+  // İlçe değiştiğinde koordinatları bul
+  useEffect(() => {
+    const fetchCoordinates = async () => {
+      if (!selectedDistrict || !selectedProvince) return;
+
+      setStatusMessage(`${selectedDistrict}, ${selectedProvince} için konum bulunuyor...`);
+      try {
+        const query = `${selectedDistrict}, ${selectedProvince}, Turkey`;
+        const url = `${GEOCODING_URL}?name=${encodeURIComponent(query)}&count=1&language=tr&format=json`;
+
+        const response = await fetch(url);
+        const data = await response.json();
+
+        if (data.results && data.results.length > 0) {
+          const { latitude, longitude } = data.results[0];
+          setCoordinates({ lat: latitude, lon: longitude });
+          setStatusMessage(`${selectedDistrict} konumu güncellendi.`);
+          // Konum değişince hava durumunu temizle veya otomatik yenile? 
+          // Şimdilik manuel yenileme bırakalım veya kullanıcı "Test Et" desin.
+        } else {
+          console.error("Konum bulunamadı");
+          setStatusMessage("Hata: Seçilen ilçenin koordinatları bulunamadı.");
+        }
+      } catch (error) {
+        console.error("Geocoding hatası:", error);
+        setStatusMessage("Hata: Konum servisine erişilemedi.");
+      }
+    };
+
+    // İlk açılışta değil, kullanıcı değiştirdiğinde çalışsın (fakat varsayılanlar zaten sabit)
+    // Ancak component mount olduğunda çalışması sorun olmaz.
+    if (selectedDistrict !== DEFAULT_DISTRICT || selectedProvince !== DEFAULT_PROVINCE) {
+      fetchCoordinates();
+    }
+  }, [selectedDistrict, selectedProvince]);
 
 
   // Hava durumu API çağrısı
   const fetchWeather = useCallback(async () => {
     setIsLoading(true);
-    setStatusMessage("Hava durumu verileri çekiliyor (Derince ve Gebze)...");
+    setStatusMessage(`${selectedDistrict} için hava durumu verileri çekiliyor...`);
 
     let allWeatherData = [];
     let announcementText = "";
 
-    // SABİT CITIES listesi kullanılıyor
-    for (let i = 0; i < CITIES.length; i++) {
-      const city = CITIES[i];
-      const url = `${OPENMETEO_URL}?latitude=${city.lat}&longitude=${city.lon}&hourly=temperature_2m,weathercode&temperature_unit=celsius&timeformat=iso8601&timezone=Europe%2FIstanbul&forecast_days=1`;
+    const url = `${OPENMETEO_URL}?latitude=${coordinates.lat}&longitude=${coordinates.lon}&hourly=temperature_2m,weathercode&temperature_unit=celsius&timeformat=iso8601&timezone=Europe%2FIstanbul&forecast_days=1`;
 
-      try {
-        const response = await fetch(url);
-        if (!response.ok) throw new Error(`HTTP Hata: ${response.status} (${city.name})`);
+    try {
+      const response = await fetch(url);
+      if (!response.ok) throw new Error(`HTTP Hata: ${response.status}`);
 
-        const data = await response.json();
+      const data = await response.json();
 
-        const rawTemp = data.hourly?.temperature_2m?.[0];
-        const wmoCode = data.hourly?.weathercode?.[0];
+      const rawTemp = data.hourly?.temperature_2m?.[0];
+      const wmoCode = data.hourly?.weathercode?.[0];
 
-        console.log(`[OPEN-METEO HAM VERİSİ - ${city.name}] Ham Sıcaklık: ${rawTemp}, WMO Kodu: ${wmoCode}`);
+      console.log(`[OPEN-METEO] ${selectedDistrict} - Sıcaklık: ${rawTemp}, WMO: ${wmoCode}`);
 
-        if (rawTemp === undefined || wmoCode === undefined) {
-          throw new Error("API yanıtında beklenen saatlik veri bulunamadı.");
-        }
-
-        const temp = rawTemp.toFixed(1);
-        const condition = getWeatherDescription(wmoCode);
-
-        allWeatherData.push({
-          name: city.name,
-          temp: temp,
-          condition: condition
-        });
-
-        // Anons metni oluşturma mantığı
-        if (i === 0) {
-          announcementText += `Günaydın. ${city.name}'de hava ${temp} derece ve ${condition}. `;
-        } else {
-          announcementText += `${city.name}'de ise hava ${temp} derece ve ${condition}. `;
-        }
-
-
-      } catch (error) {
-        console.error("Hava durumu çekme hatası:", error);
-        allWeatherData.push({ name: city.name, temp: '?', condition: 'Hata' });
-        announcementText += `${city.name} hava bilgisi alınamadı. `;
+      if (rawTemp === undefined || wmoCode === undefined) {
+        throw new Error("API yanıtında veri yok.");
       }
+
+      const temp = rawTemp.toFixed(1);
+      const condition = getWeatherDescription(wmoCode);
+
+      allWeatherData.push({
+        name: selectedDistrict,
+        temp: temp,
+        condition: condition
+      });
+
+      announcementText = `Günaydın. ${selectedDistrict}'de hava ${temp} derece ve ${condition}. `;
+
+    } catch (error) {
+      console.error("Hava durumu hatası:", error);
+      allWeatherData.push({ name: selectedDistrict, temp: '?', condition: 'Hata' });
+      announcementText = `${selectedDistrict} hava bilgisi alınamadı. `;
     }
 
     setWeatherData(allWeatherData);
     await triggerAnnouncement(announcementText);
 
-  }, []);
+  }, [coordinates, selectedDistrict]);
 
   // TTS ile sesli anonsu tetikler
   const triggerAnnouncement = useCallback(async (text) => {
@@ -332,27 +360,25 @@ function App() {
     }
   }, []);
 
-  // Zamanlama ve Alarm Mantığı (Android Service simülasyonu)
+  // Zamanlama ve Alarm Mantığı
   useEffect(() => {
     if (!isSchedulerActive) {
-      console.log("[SCHEDULER] Otomatik zamanlayıcı devredışı.");
-      setStatusMessage("Otomatik anons durduruldu. Sadece manuel çalışabilir.");
+      setStatusMessage("Otomatik anons durduruldu.");
       return;
     }
 
-    const scheduledHour = TARGET_TIME_HOUR; // SABİT 06
-    const scheduledMinute = TARGET_TIME_MINUTE; // SABİT 15
-
     const checkTimeAndAnnounce = () => {
       const now = new Date();
-      const hour = now.getHours();
-      const minute = now.getMinutes();
+      const currentHour = now.getHours();
+      const currentMinute = now.getMinutes();
       const dayOfWeek = now.getDay();
 
-      // Hafta içi (Pazartesi=1'den Cuma=5'e kadar) ve tam belirlenen saati kontrol et
+      const [targetH, targetM] = targetTime.split(':').map(Number);
+
+      // Hafta içi (1-5) ve hedef saat
       if (dayOfWeek >= 1 && dayOfWeek <= 5 &&
-        hour === scheduledHour &&
-        minute === scheduledMinute) {
+        currentHour === targetH &&
+        currentMinute === targetM) {
 
         const today = now.toDateString();
         const lastAnnounceDate = lastAnnounceTime ? new Date(lastAnnounceTime).toDateString() : null;
@@ -361,22 +387,21 @@ function App() {
           return;
         }
 
-        console.log(`[ALARM] Hedef saat (${scheduledHour}:${scheduledMinute}) geldi. Anons başlatılıyor.`);
+        console.log(`[ALARM] Hedef saat (${targetTime}) geldi.`);
         fetchWeather();
 
       } else {
-        setStatusMessage(isSchedulerActive
-          ? `Otomatik anons aktif. Hedef: Hafta içi ${scheduledHour.toString().padStart(2, '0')}:${scheduledMinute.toString().padStart(2, '0')}`
-          : "Otomatik anons durduruldu. Sadece manuel çalışabilir.");
+        // Durum mesajını sürekli güncellemek yerine sadece değişimde güncellemek daha iyi olabilir ama
+        // şimdilik basit tutalım.
+        // setStatusMessage(`Otomatik anons aktif. Hedef: Hafta içi ${targetTime}`);
       }
     };
 
     const intervalId = setInterval(checkTimeAndAnnounce, 60000);
-
-    checkTimeAndAnnounce();
+    checkTimeAndAnnounce(); // İlk kontrol
 
     return () => clearInterval(intervalId);
-  }, [fetchWeather, lastAnnounceTime, isSchedulerActive]);
+  }, [fetchWeather, lastAnnounceTime, isSchedulerActive, targetTime]);
 
   // UI Bileşeni: Hava Durumu Kartı
   const WeatherCard = ({ data }) => {
@@ -404,21 +429,71 @@ function App() {
     const colorClass = isSchedulerActive ? 'bg-indigo-600' : 'bg-gray-400';
 
     return (
-      <div className="flex justify-between items-center p-4 bg-white rounded-xl shadow">
-        <p className="text-lg font-semibold text-gray-800">Otomatik Anons ({TARGET_TIME_HOUR.toString().padStart(2, '0')}:{TARGET_TIME_MINUTE.toString().padStart(2, '0')})</p>
-        <button
-          onClick={() => setIsSchedulerActive(!isSchedulerActive)}
-          className={`relative inline-flex items-center h-8 w-16 rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 ${colorClass}`}
-          aria-checked={isSchedulerActive}
-        >
-          <span className="sr-only">Toggle automatic announcement</span>
-          <span
-            aria-hidden="true"
-            className={`pointer-events-none inline-block h-6 w-6 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${isSchedulerActive ? 'translate-x-8' : 'translate-x-1'
-              }`}
-          />
-          <ToggleIcon className={`absolute inset-y-0 h-6 w-6 m-1 transition-transform duration-200 ease-in-out ${isSchedulerActive ? 'translate-x-1' : 'translate-x-8 text-white'}`} />
-        </button>
+      <div className="flex flex-col space-y-4 p-4 bg-white rounded-xl shadow">
+        {/* Üst Kısım: Toggle ve Başlık */}
+        <div className="flex justify-between items-center">
+          <p className="text-lg font-semibold text-gray-800">Otomatik Anons ({targetTime})</p>
+          <button
+            onClick={() => setIsSchedulerActive(!isSchedulerActive)}
+            className={`relative inline-flex items-center h-8 w-16 rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 ${colorClass}`}
+          >
+            <span className={`pointer-events-none inline-block h-6 w-6 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${isSchedulerActive ? 'translate-x-8' : 'translate-x-1'}`} />
+            <ToggleIcon className={`absolute inset-y-0 h-6 w-6 m-1 transition-transform duration-200 ease-in-out ${isSchedulerActive ? 'translate-x-1' : 'translate-x-8 text-white'}`} />
+          </button>
+        </div>
+
+        {/* Alt Kısım: Ayarlar (Sadece aktifse veya her zaman gösterilebilir, kullanıcı isteğine göre) */}
+        <div className="grid grid-cols-1 gap-4 pt-4 border-t border-gray-100">
+          {/* Saat Seçimi */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Anons Saati</label>
+            <input
+              type="time"
+              value={targetTime}
+              onChange={(e) => setTargetTime(e.target.value)}
+              className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+            />
+          </div>
+
+          {/* İl Seçimi */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">İl</label>
+            <select
+              value={selectedProvince}
+              onChange={(e) => {
+                setSelectedProvince(e.target.value);
+                // İl değişince ilçeyi sıfırla veya ilkini seç
+                const newDistricts = TURKEY_LOCATIONS.find(p => p.province === e.target.value)?.districts || [];
+                if (newDistricts.length > 0) setSelectedDistrict(newDistricts[0]);
+              }}
+              className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+            >
+              {TURKEY_LOCATIONS.map(loc => (
+                <option key={loc.province} value={loc.province}>{loc.province}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* İlçe Seçimi */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">İlçe</label>
+            <select
+              value={selectedDistrict}
+              onChange={(e) => setSelectedDistrict(e.target.value)}
+              className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+            >
+              {TURKEY_LOCATIONS.find(p => p.province === selectedProvince)?.districts.map(dist => (
+                <option key={dist} value={dist}>{dist}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {isSchedulerActive && (
+          <p className="text-xs text-indigo-600 mt-2">
+            Otomatik anons aktif. Hedef: Hafta içi {targetTime}
+          </p>
+        )}
       </div>
     );
   };
@@ -432,13 +507,11 @@ function App() {
             <Bell className="w-8 h-8 text-indigo-500 mr-2" />
             Sabah Anonsu
           </h1>
-          <p className="mt-1 text-sm text-gray-500">
-            Derince ve Gebze İçin Otomatik Hava Durumu (06:15)
-          </p>
+          {/* Alt başlık kaldırıldı veya dinamik yapılabilir */}
         </header>
 
         <main className="space-y-6">
-          {/* ZAMANLAYICI AÇ/KAPAT */}
+          {/* ZAMANLAYICI AÇ/KAPAT ve AYARLAR */}
           <ToggleScheduler />
 
           {/* Durum Mesajı Kartı */}
@@ -469,8 +542,8 @@ function App() {
             onClick={() => fetchWeather()}
             disabled={isLoading}
             className={`w-full flex items-center justify-center px-6 py-3 border border-transparent text-base font-medium rounded-xl text-white shadow-lg transform transition duration-150 ${isLoading
-                ? 'bg-indigo-400 cursor-not-allowed'
-                : 'bg-indigo-600 hover:bg-indigo-700 hover:scale-[1.01] active:scale-95'
+              ? 'bg-indigo-400 cursor-not-allowed'
+              : 'bg-indigo-600 hover:bg-indigo-700 hover:scale-[1.01] active:scale-95'
               }`}
           >
             {isLoading ? (
@@ -495,8 +568,7 @@ function App() {
           )}
 
           <div className="pt-4 border-t border-gray-200 text-xs text-gray-500 text-center">
-            <p>Simülasyon Notu: Otomatik anons Hafta İçi saat 06:15'te gerçekleşir.</p>
-            <p>Bu uygulama Gemini TTS API'si ile sesli çıkış sağlamaktadır.</p>
+            {/* Simülasyon notları kaldırıldı */}
           </div>
 
         </main>
