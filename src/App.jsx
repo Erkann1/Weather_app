@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { RefreshCcw, Bell, CloudRain, Sun, Zap, Sunrise, ToggleLeft, ToggleRight, AlertTriangle } from 'lucide-react';
 import { CapacitorForegroundService } from 'capacitor-foreground-service';
+import { LocalNotifications } from '@capacitor/local-notifications';
 
 import { TURKEY_LOCATIONS } from './data/turkey_locations';
 
@@ -386,7 +387,7 @@ function App() {
       return;
     }
 
-    // Servisi başlat
+    // Servisi başlat (Foreground Service - İsteğe bağlı, bildirim için tutuyoruz ama alarm için LocalNotification kullanacağız)
     const startService = async () => {
       try {
         await CapacitorForegroundService.start({
@@ -402,6 +403,58 @@ function App() {
       }
     };
     startService();
+
+    // Local Notification Zamanlama
+    const scheduleNotification = async () => {
+      try {
+        // Önce izin iste
+        const perm = await LocalNotifications.requestPermissions();
+        if (perm.display !== 'granted') {
+          console.warn("Bildirim izni verilmedi!");
+          setStatusMessage("Uyarı: Bildirim izni verilmediği için alarm çalmayabilir.");
+          return;
+        }
+
+        const [targetH, targetM] = targetTime.split(':').map(Number);
+        const now = new Date();
+        let scheduleDate = new Date();
+        scheduleDate.setHours(targetH, targetM, 0, 0);
+
+        if (scheduleDate <= now) {
+          // Eğer saat geçtiyse yarına kur
+          scheduleDate.setDate(scheduleDate.getDate() + 1);
+        }
+
+        // Mevcut bildirimleri temizle
+        await LocalNotifications.cancel({ notifications: [{ id: 1 }] });
+
+        // Yeni bildirim kur
+        await LocalNotifications.schedule({
+          notifications: [{
+            title: "Günaydın! ☀️",
+            body: "Hava durumunu dinlemek için dokunun.",
+            id: 1,
+            schedule: { at: scheduleDate, repeats: true, every: 'day' }, // Her gün tekrarla
+            sound: 'beep.wav', // Varsayılan ses
+            attachments: null,
+            actionTypeId: "",
+            extra: null
+          }]
+        });
+        console.log(`[ALARM] Bildirim kuruldu: ${scheduleDate.toLocaleString()}`);
+
+      } catch (e) {
+        console.error("Bildirim kurma hatası:", e);
+      }
+    };
+    scheduleNotification();
+
+    // Bildirime tıklanınca çalışacak listener
+    LocalNotifications.addListener('localNotificationActionPerformed', async (notification) => {
+      console.log("Bildirime tıklandı!", notification);
+      // Uygulama açılınca hemen hava durumunu çek ve oku
+      fetchWeather(true);
+    });
 
     const checkTimeAndAnnounce = () => {
       const now = new Date();
@@ -436,7 +489,10 @@ function App() {
     const intervalId = setInterval(checkTimeAndAnnounce, 60000);
     checkTimeAndAnnounce(); // İlk kontrol
 
-    return () => clearInterval(intervalId);
+    return () => {
+      clearInterval(intervalId);
+      LocalNotifications.removeAllListeners(); // Listener'ları temizle
+    };
   }, [fetchWeather, lastAnnounceTime, isSchedulerActive, targetTime]);
 
   // UI Bileşeni: Hava Durumu Kartı
