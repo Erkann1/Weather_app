@@ -14,5 +14,7 @@ public class MainActivity extends BridgeActivity {
                 WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD |
                 WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED |
                 WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON);
+
+        registerPlugin(AlarmPlugin.class);
     }
 }

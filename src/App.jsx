@@ -2,6 +2,10 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { RefreshCcw, Bell, CloudRain, Sun, Zap, Sunrise, ToggleLeft, ToggleRight, AlertTriangle } from 'lucide-react';
 import { CapacitorForegroundService } from 'capacitor-foreground-service';
 import { LocalNotifications } from '@capacitor/local-notifications';
+import { App as CapacitorApp } from '@capacitor/app';
+import { registerPlugin } from '@capacitor/core';
+
+const AlarmPlugin = registerPlugin('AlarmPlugin');
 
 import { TURKEY_LOCATIONS } from './data/turkey_locations';
 
@@ -433,23 +437,28 @@ function App() {
           scheduleDate.setDate(scheduleDate.getDate() + 1);
         }
 
-        // Mevcut bildirimleri temizle
+        // Mevcut bildirimleri temizle (LocalNotification yedeği)
         await LocalNotifications.cancel({ notifications: [{ id: 1 }] });
+        // Native Alarmı iptal et (Önceki varsa)
+        await AlarmPlugin.cancelAlarm();
 
-        // Yeni bildirim kur
+        // Yeni Native Alarm kur
+        await AlarmPlugin.setAlarm({ timestamp: scheduleDate.getTime() });
+        console.log(`[ALARM] Native Alarm kuruldu: ${scheduleDate.toLocaleString()}`);
+
+        // Yedek olarak Local Notification da kalsın (Ekranda görünmesi için)
         await LocalNotifications.schedule({
           notifications: [{
             title: "Günaydın! ☀️",
             body: "Hava durumunu dinlemek için dokunun.",
             id: 1,
-            schedule: { at: scheduleDate, repeats: true, every: 'day' }, // Her gün tekrarla
-            sound: 'beep.wav', // Varsayılan ses
+            schedule: { at: scheduleDate, repeats: true, every: 'day' },
+            sound: 'beep.wav',
             attachments: null,
             actionTypeId: "",
             extra: null
           }]
         });
-        console.log(`[ALARM] Bildirim kuruldu: ${scheduleDate.toLocaleString()}`);
 
       } catch (e) {
         console.error("Bildirim kurma hatası:", e);
@@ -497,9 +506,18 @@ function App() {
     const intervalId = setInterval(checkTimeAndAnnounce, 60000);
     checkTimeAndAnnounce(); // İlk kontrol
 
+    // Uygulama öne geldiğinde (Alarm uyandırdığında) kontrol et
+    const appStateListener = CapacitorApp.addListener('appStateChange', ({ isActive }) => {
+      if (isActive) {
+        console.log("Uygulama öne geldi, saat kontrol ediliyor...");
+        checkTimeAndAnnounce();
+      }
+    });
+
     return () => {
       clearInterval(intervalId);
-      LocalNotifications.removeAllListeners(); // Listener'ları temizle
+      LocalNotifications.removeAllListeners();
+      appStateListener.then(listener => listener.remove());
     };
   }, [fetchWeather, lastAnnounceTime, isSchedulerActive, targetTime]);
 
