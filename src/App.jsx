@@ -192,9 +192,11 @@ function App() {
 
 
   // Hava durumu API çağrısı
-  const fetchWeather = useCallback(async () => {
+  const fetchWeather = useCallback(async (shouldAnnounce = true) => {
     setIsLoading(true);
-    setStatusMessage(`${selectedDistrict} için hava durumu verileri çekiliyor...`);
+    if (shouldAnnounce) {
+      setStatusMessage(`${selectedDistrict} için hava durumu verileri çekiliyor...`);
+    }
 
     let allWeatherData = [];
     let announcementText = "";
@@ -210,7 +212,7 @@ function App() {
       const rawTemp = data.hourly?.temperature_2m?.[0];
       const wmoCode = data.hourly?.weathercode?.[0];
 
-      console.log(`[OPEN-METEO] ${selectedDistrict} - Sıcaklık: ${rawTemp}, WMO: ${wmoCode}`);
+      console.log(`[OPEN-METEO] ${selectedDistrict} (${coordinates.lat}, ${coordinates.lon}) - Sıcaklık: ${rawTemp}, WMO: ${wmoCode}`);
 
       if (rawTemp === undefined || wmoCode === undefined) {
         throw new Error("API yanıtında veri yok.");
@@ -234,9 +236,21 @@ function App() {
     }
 
     setWeatherData(allWeatherData);
-    await triggerAnnouncement(announcementText);
+
+    if (shouldAnnounce) {
+      await triggerAnnouncement(announcementText);
+    } else {
+      setIsLoading(false);
+    }
 
   }, [coordinates, selectedDistrict]);
+
+  // Koordinatlar değiştiğinde otomatik olarak hava durumunu güncelle (Sessiz)
+  useEffect(() => {
+    if (coordinates.lat !== DEFAULT_LAT || coordinates.lon !== DEFAULT_LON) {
+      fetchWeather(false);
+    }
+  }, [coordinates, fetchWeather]);
 
   // TTS ile sesli anonsu tetikler
   const triggerAnnouncement = useCallback(async (text) => {
@@ -542,6 +556,7 @@ function App() {
             {lastAnnounceTime && (
               <p className="text-indigo-600 text-xs mt-1">Son Anons: {lastAnnounceTime}</p>
             )}
+            <p className="text-gray-400 text-[10px] mt-1">Konum: {coordinates.lat.toFixed(4)}, {coordinates.lon.toFixed(4)}</p>
           </div>
 
           {/* Hava Durumu Listesi */}
@@ -561,7 +576,7 @@ function App() {
 
           {/* Anons Tetikleme Butonu */}
           <button
-            onClick={() => fetchWeather()}
+            onClick={() => fetchWeather(true)}
             disabled={isLoading}
             className={`w-full flex items-center justify-center px-6 py-3 border border-transparent text-base font-medium rounded-xl text-white shadow-lg transform transition duration-150 ${isLoading
               ? 'bg-indigo-400 cursor-not-allowed'
