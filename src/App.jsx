@@ -419,11 +419,22 @@ function App() {
     // Local Notification Zamanlama
     const scheduleNotification = async () => {
       try {
-        // Bildirim İzni
-        const perm = await LocalNotifications.requestPermissions();
-        if (perm.display !== 'granted') {
-          setStatusMessage("Uyarı: Bildirim izni verilmedi!");
-          return;
+        // Bildirim İzni (Native Plugin üzerinden)
+        try {
+          // Native Alarm Plugin üzerinden izin iste (POST_NOTIFICATIONS ve SCHEDULE_EXACT_ALARM)
+          const permResult = await AlarmPlugin.requestPermissions();
+          console.log("AlarmPlugin izin sonucu:", permResult);
+
+          if (permResult.notifications !== 'granted' && permResult.notifications !== 'prompt') {
+            // Capacitor 4'te bazen prompt dönebilir, granted değilse uyar
+            // Ancak POST_NOTIFICATIONS için 'granted' bekliyoruz.
+            // Yine de LocalNotifications.requestPermissions() da çağıralım, yedek olsun.
+            await LocalNotifications.requestPermissions();
+          }
+        } catch (e) {
+          console.error("Native izin isteği hatası:", e);
+          // Fallback
+          await LocalNotifications.requestPermissions();
         }
 
         // Android 12+ için Tam Zamanlı Alarm İzni Kontrolü (Basitçe kullanıcıyı uyaralım)

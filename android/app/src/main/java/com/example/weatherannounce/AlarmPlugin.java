@@ -9,8 +9,27 @@ import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
 import android.util.Log;
+import android.Manifest;
+import android.content.pm.PackageManager;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
+import com.getcapacitor.PermissionState;
+import com.getcapacitor.annotation.Permission;
+import com.getcapacitor.annotation.PermissionCallback;
 
-@CapacitorPlugin(name = "AlarmPlugin")
+@CapacitorPlugin(
+    name = "AlarmPlugin",
+    permissions = {
+        @Permission(
+            alias = "notifications",
+            strings = { Manifest.permission.POST_NOTIFICATIONS }
+        ),
+        @Permission(
+            alias = "schedule_exact_alarm",
+            strings = { Manifest.permission.SCHEDULE_EXACT_ALARM }
+        )
+    }
+)
 public class AlarmPlugin extends Plugin {
 
     @PluginMethod
