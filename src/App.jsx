@@ -147,13 +147,21 @@ function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [audioUrl, setAudioUrl] = useState(null);
   const [lastAnnounceTime, setLastAnnounceTime] = useState(null);
-  const [isSchedulerActive, setIsSchedulerActive] = useState(true);
 
-  // Yeni State'ler
-  const [targetTime, setTargetTime] = useState(DEFAULT_TIME);
-  const [selectedProvince, setSelectedProvince] = useState(DEFAULT_PROVINCE);
-  const [selectedDistrict, setSelectedDistrict] = useState(DEFAULT_DISTRICT);
+
+  // Yeni State'ler (LocalStorage'dan okuma)
+  const [targetTime, setTargetTime] = useState(() => localStorage.getItem('targetTime') || DEFAULT_TIME);
+  const [selectedProvince, setSelectedProvince] = useState(() => localStorage.getItem('selectedProvince') || DEFAULT_PROVINCE);
+  const [selectedDistrict, setSelectedDistrict] = useState(() => localStorage.getItem('selectedDistrict') || DEFAULT_DISTRICT);
   const [coordinates, setCoordinates] = useState({ lat: DEFAULT_LAT, lon: DEFAULT_LON });
+  // isSchedulerActive varsayılan olarak false olsun, kullanıcı açsın.
+  const [isSchedulerActive, setIsSchedulerActive] = useState(() => localStorage.getItem('isSchedulerActive') === 'true');
+
+  // Ayarları Kaydetme Effect'leri
+  useEffect(() => { localStorage.setItem('targetTime', targetTime); }, [targetTime]);
+  useEffect(() => { localStorage.setItem('selectedProvince', selectedProvince); }, [selectedProvince]);
+  useEffect(() => { localStorage.setItem('selectedDistrict', selectedDistrict); }, [selectedDistrict]);
+  useEffect(() => { localStorage.setItem('isSchedulerActive', isSchedulerActive); }, [isSchedulerActive]);
 
   // İlçe değiştiğinde koordinatları bul
   useEffect(() => {
@@ -523,15 +531,12 @@ function App() {
     return (
       <div className="flex flex-col space-y-4 p-4 bg-white rounded-xl shadow">
         {/* Üst Kısım: Toggle ve Başlık */}
-        <div className="flex justify-between items-center">
-          <p className="text-lg font-semibold text-gray-800">Otomatik Anons ({targetTime})</p>
-          <button
-            onClick={() => setIsSchedulerActive(!isSchedulerActive)}
-            className={`relative inline-flex items-center h-8 w-16 rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 ${colorClass}`}
-          >
-            <span className={`pointer-events-none inline-block h-6 w-6 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${isSchedulerActive ? 'translate-x-8' : 'translate-x-1'}`} />
-            <ToggleIcon className={`absolute inset-y-0 h-6 w-6 m-1 transition-transform duration-200 ease-in-out ${isSchedulerActive ? 'translate-x-1' : 'translate-x-8 text-white'}`} />
-          </button>
+        {/* Üst Kısım: Başlık */}
+        <div className="flex justify-between items-center mb-4">
+          <p className="text-lg font-semibold text-gray-800">Alarm Ayarları</p>
+          <div className={`px-3 py-1 rounded-full text-xs font-bold ${isSchedulerActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
+            {isSchedulerActive ? 'KURULU' : 'KAPALI'}
+          </div>
         </div>
 
         {/* Alt Kısım: Ayarlar (Sadece aktifse veya her zaman gösterilebilir, kullanıcı isteğine göre) */}
@@ -581,11 +586,53 @@ function App() {
           </div>
         </div>
 
-        {isSchedulerActive && (
-          <p className="text-xs text-indigo-600 mt-2">
-            Otomatik anons aktif. Hedef: Hafta içi {targetTime}
-          </p>
-        )}
+        {/* Alarm Kontrol Butonları */}
+        <div className="mt-6 space-y-3">
+          <button
+            onClick={() => setIsSchedulerActive(!isSchedulerActive)}
+            className={`w-full flex items-center justify-center px-6 py-3 border border-transparent text-base font-medium rounded-xl text-white shadow-sm transition-all duration-200 ${isSchedulerActive
+              ? 'bg-red-500 hover:bg-red-600'
+              : 'bg-indigo-600 hover:bg-indigo-700'
+              }`}
+          >
+            {isSchedulerActive ? (
+              <>
+                <ToggleRight className="w-5 h-5 mr-2" />
+                Alarmı Kapat
+              </>
+            ) : (
+              <>
+                <ToggleLeft className="w-5 h-5 mr-2" />
+                Alarmı Kaydet ve Başlat
+              </>
+            )}
+          </button>
+
+          {/* Test Bildirimi Butonu */}
+          <button
+            onClick={async () => {
+              const perm = await LocalNotifications.requestPermissions();
+              if (perm.display === 'granted') {
+                await LocalNotifications.schedule({
+                  notifications: [{
+                    title: "Test Bildirimi 🔔",
+                    body: "Alarm sistemi çalışıyor. Dokunursanız hava durumu okunacak.",
+                    id: 999,
+                    schedule: { at: new Date(Date.now() + 5000) }, // 5 saniye sonra
+                    sound: 'beep.wav'
+                  }]
+                });
+                setStatusMessage("5 saniye sonra test bildirimi gelecek...");
+              } else {
+                setStatusMessage("Bildirim izni reddedildi!");
+              }
+            }}
+            className="w-full flex items-center justify-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-lg text-gray-700 bg-white hover:bg-gray-50"
+          >
+            <Bell className="w-4 h-4 mr-2" />
+            5 Saniye Sonra Test Et
+          </button>
+        </div>
       </div>
     );
   };
@@ -631,26 +678,13 @@ function App() {
           </div>
 
           {/* Anons Tetikleme Butonu */}
-          <button
-            onClick={() => fetchWeather(true)}
-            disabled={isLoading}
-            className={`w-full flex items-center justify-center px-6 py-3 border border-transparent text-base font-medium rounded-xl text-white shadow-lg transform transition duration-150 ${isLoading
-              ? 'bg-indigo-400 cursor-not-allowed'
-              : 'bg-indigo-600 hover:bg-indigo-700 hover:scale-[1.01] active:scale-95'
-              }`}
-          >
-            {isLoading ? (
-              <>
-                <RefreshCcw className="w-5 h-5 mr-3 animate-spin" />
-                İşleniyor...
-              </>
-            ) : (
-              <>
-                <Bell className="w-5 h-5 mr-3" />
-                Hemen Anons Et (Test Et)
-              </>
-            )}
-          </button>
+          {/* Eski Test Butonu Kaldırıldı, yerine ufak bir manuel tetikleyici eklenebilir veya tamamen kaldırılabilir.
+              Kullanıcı isteği üzerine kaldırıldı. */}
+          <div className="text-center">
+            <button onClick={() => fetchWeather(true)} className="text-xs text-gray-400 underline hover:text-gray-600">
+              Manuel Hava Durumu Oku (Debug)
+            </button>
+          </div>
 
           {/* Ses Çalma Kontrolü (Görünmez, sadece debug için) */}
           {audioUrl && (
