@@ -419,13 +419,15 @@ function App() {
     // Local Notification Zamanlama
     const scheduleNotification = async () => {
       try {
-        // Önce izin iste
+        // Bildirim İzni
         const perm = await LocalNotifications.requestPermissions();
         if (perm.display !== 'granted') {
-          console.warn("Bildirim izni verilmedi!");
-          setStatusMessage("Uyarı: Bildirim izni verilmediği için alarm çalmayabilir.");
+          setStatusMessage("Uyarı: Bildirim izni verilmedi!");
           return;
         }
+
+        // Android 12+ için Tam Zamanlı Alarm İzni Kontrolü (Basitçe kullanıcıyı uyaralım)
+        // Gerçek bir plugin ile kontrol edilebilir ama şimdilik kullanıcıya bırakıyoruz.
 
         const [targetH, targetM] = targetTime.split(':').map(Number);
         const now = new Date();
@@ -488,18 +490,18 @@ function App() {
 
         const today = now.toDateString();
         const lastAnnounceDate = lastAnnounceTime ? new Date(lastAnnounceTime).toDateString() : null;
+        const lastAnnounceHour = lastAnnounceTime ? new Date(lastAnnounceTime).getHours() : -1;
+        const lastAnnounceMinute = lastAnnounceTime ? new Date(lastAnnounceTime).getMinutes() : -1;
 
-        if (lastAnnounceDate === today) {
+        // Eğer bugün ve bu saat/dakikada zaten anons yapıldıysa tekrar yapma
+        if (lastAnnounceDate === today && lastAnnounceHour === currentHour && lastAnnounceMinute === currentMinute) {
+          console.log("Bu dakika içinde zaten anons yapıldı, atlanıyor.");
           return;
         }
 
-        console.log(`[ALARM] Hedef saat (${targetTime}) geldi.`);
-        fetchWeather();
+        console.log(`[ALARM] Hedef saat (${targetTime}) geldi. Anons başlatılıyor.`);
+        fetchWeather(true); // shouldAnnounce=true
 
-      } else {
-        // Durum mesajını sürekli güncellemek yerine sadece değişimde güncellemek daha iyi olabilir ama
-        // şimdilik basit tutalım.
-        // setStatusMessage(`Otomatik anons aktif. Hedef: Hafta içi ${targetTime}`);
       }
     };
 
@@ -507,17 +509,23 @@ function App() {
     checkTimeAndAnnounce(); // İlk kontrol
 
     // Uygulama öne geldiğinde (Alarm uyandırdığında) kontrol et
-    const appStateListener = CapacitorApp.addListener('appStateChange', ({ isActive }) => {
+    let appStateListenerHandle;
+    CapacitorApp.addListener('appStateChange', ({ isActive }) => {
       if (isActive) {
         console.log("Uygulama öne geldi, saat kontrol ediliyor...");
-        checkTimeAndAnnounce();
+        // Biraz gecikmeli çalıştır ki state güncellensin
+        setTimeout(checkTimeAndAnnounce, 1000);
       }
+    }).then(handle => {
+      appStateListenerHandle = handle;
     });
 
     return () => {
       clearInterval(intervalId);
       LocalNotifications.removeAllListeners();
-      appStateListener.then(listener => listener.remove());
+      if (appStateListenerHandle) {
+        appStateListenerHandle.remove();
+      }
     };
   }, [fetchWeather, lastAnnounceTime, isSchedulerActive, targetTime]);
 

@@ -9,14 +9,25 @@ import android.app.PendingIntent;
 import android.os.Build;
 import androidx.core.app.NotificationCompat;
 import android.util.Log;
+import android.os.PowerManager;
 
 public class AlarmReceiver extends BroadcastReceiver {
     @Override
     public void onReceive(Context context, Intent intent) {
         Log.d("AlarmReceiver", "Alarm triggered!");
 
+        // WakeLock al
+        PowerManager powerManager = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
+        PowerManager.WakeLock wakeLock = powerManager.newWakeLock(PowerManager.FULL_WAKE_LOCK |
+                PowerManager.ACQUIRE_CAUSES_WAKEUP |
+                PowerManager.ON_AFTER_RELEASE, "WeatherAnnounce:AlarmWakeLock");
+        wakeLock.acquire(3000); // 3 saniye tut
+
         Intent fullScreenIntent = new Intent(context, MainActivity.class);
-        fullScreenIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        fullScreenIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | 
+                                  Intent.FLAG_ACTIVITY_CLEAR_TOP | 
+                                  Intent.FLAG_ACTIVITY_SINGLE_TOP | 
+                                  Intent.FLAG_ACTIVITY_REORDER_TO_FRONT);
         
         PendingIntent fullScreenPendingIntent = PendingIntent.getActivity(context, 0,
                 fullScreenIntent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
