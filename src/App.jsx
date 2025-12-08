@@ -785,7 +785,7 @@ function App() {
           )}
 
           <div className="pt-4 border-t border-gray-200 text-xs text-gray-500 text-center">
-            {/* Simülasyon notları kaldırıldı */}
+            <p>Versiyon: 2.0.0-{new Date().toISOString().slice(0, 10).replace(/-/g, '')}</p>
           </div>
 
         </main>
