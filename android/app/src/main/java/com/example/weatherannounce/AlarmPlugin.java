@@ -47,17 +47,18 @@ public class AlarmPlugin extends Plugin {
         Intent intent = new Intent(context, AlarmReceiver.class);
         PendingIntent pendingIntent = PendingIntent.getBroadcast(context, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
 
-        // Use setAlarmClock for most reliable alarm - shows alarm icon in status bar
+        // Use setAlarmClock for most reliable alarm - wakes device and effectively bypasses doze
+        // This is essential for the "Auto-Launch" behavior requested
         Intent showIntent = new Intent(context, MainActivity.class);
+        showIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
         PendingIntent showPendingIntent = PendingIntent.getActivity(context, 0, showIntent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
         
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
             AlarmManager.AlarmClockInfo alarmClockInfo = new AlarmManager.AlarmClockInfo(triggerTime, showPendingIntent);
             alarmManager.setAlarmClock(alarmClockInfo, pendingIntent);
-            Log.d("AlarmPlugin", "AlarmClock set for: " + triggerTime + " (" + new java.util.Date(triggerTime) + ")");
+            Log.d("AlarmPlugin", "AlarmClock set for: " + triggerTime);
         } else {
             alarmManager.setExact(AlarmManager.RTC_WAKEUP, triggerTime, pendingIntent);
-            Log.d("AlarmPlugin", "Exact alarm set for: " + triggerTime);
         }
 
         call.resolve();

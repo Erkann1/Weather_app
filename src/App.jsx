@@ -5,17 +5,9 @@ import { LocalNotifications } from '@capacitor/local-notifications';
 import { App as CapacitorApp } from '@capacitor/app';
 import { registerPlugin } from '@capacitor/core';
 
-// AlarmPlugin custom native plugin - sıkıntılı, sadece LocalNotifications kullanacağız
-// const AlarmPlugin = registerPlugin('AlarmPlugin');
-const AlarmPlugin = {
-  requestPermissions: async () => {
-    // Fallback - sadece LocalNotifications kullan
-    const result = await LocalNotifications.requestPermissions();
-    return { notifications: result.display, schedule_exact_alarm: 'granted' };
-  },
-  setAlarm: async () => { console.log('[AlarmPlugin] setAlarm - LocalNotifications kullanılacak'); },
-  cancelAlarm: async () => { console.log('[AlarmPlugin] cancelAlarm - LocalNotifications kullanılacak'); }
-};
+// AlarmPlugin custom native plugin
+// We use registerPlugin to link to the native Java class
+const AlarmPlugin = registerPlugin('AlarmPlugin');
 
 import { TURKEY_LOCATIONS } from './data/turkey_locations';
 
@@ -528,22 +520,12 @@ function App() {
         // Mevcut bildirimleri temizle
         await LocalNotifications.cancel({ notifications: [{ id: 1 }] });
 
-        // Local Notification ile alarm kur (AlarmPlugin çalışmadığı için sadece bu kullanılıyor)
-        console.log(`[ALARM] LocalNotifications ile alarm kuruluyor: ${scheduleDate.toLocaleString()}`);
+        // Native Alarm kur
+        console.log(`[ALARM] Native Alarm kuruldu: ${scheduleDate.toLocaleString()}`);
+        await AlarmPlugin.setAlarm({ timestamp: scheduleDate.getTime() });
 
-        // Yedek olarak Local Notification da kalsın (Ekranda görünmesi için)
-        await LocalNotifications.schedule({
-          notifications: [{
-            title: "Günaydın! ☀️",
-            body: "Hava durumunu dinlemek için dokunun.",
-            id: 1,
-            schedule: { at: scheduleDate, repeats: true, every: 'day' },
-            sound: 'beep.wav',
-            attachments: null,
-            actionTypeId: "",
-            extra: null
-          }]
-        });
+        // Kullanıcı "Bildirim İstemiyorum" dediği için LocalNotification kurmuyoruz.
+        // AlarmPlugin native tarafında AlarmReceiver -> MainActivity başlatacak.
 
       } catch (e) {
         console.error("Bildirim kurma hatası:", e);

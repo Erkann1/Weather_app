@@ -59,6 +59,17 @@ public class AlarmReceiver extends BroadcastReceiver {
         
         // Force launch activity for good measure
         context.startActivity(fullScreenIntent);
+        
+        // Cancel the notification after a short delay to satisfy "I don't want notification" request
+        // We need the notification momentarily for the FullScreenIntent to work on locked screens
+        try {
+            // Need a handler or just let the activity cancel it onResume
+            // Ideally, MainActivity should cancel it. 
+            // But let's verify if we can cancel it here without killing the FullScreenIntent launch.
+            // Safe bet: Let MainActivity cancel it.
+        } catch (Exception e) {
+            Log.e("AlarmReceiver", "Error cancelling notification", e);
+        }
     }
 
     private void createNotificationChannel(Context context, String channelId) {

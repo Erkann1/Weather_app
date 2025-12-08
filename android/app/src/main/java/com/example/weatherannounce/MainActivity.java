@@ -17,4 +17,12 @@ public class MainActivity extends BridgeActivity {
 
         registerPlugin(AlarmPlugin.class);
     }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        // Cancel the alarm notification (ID 1) so it doesn't linger
+        android.app.NotificationManager notificationManager = (android.app.NotificationManager) getSystemService(android.content.Context.NOTIFICATION_SERVICE);
+        notificationManager.cancel(1);
+    }
 }
