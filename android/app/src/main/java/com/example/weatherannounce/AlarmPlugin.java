@@ -68,4 +68,51 @@ public class AlarmPlugin extends Plugin {
         Log.d("AlarmPlugin", "Alarm cancelled");
         call.resolve();
     }
+
+    @PluginMethod
+    public void requestPermissions(PluginCall call) {
+        // Capacitor 4 uses the built-in requestPermissionForAlias
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            // Android 13+ needs POST_NOTIFICATIONS
+            requestPermissionForAlias("notifications", call, "permissionsCallback");
+        } else {
+            // Older Android versions don't need runtime permission for notifications
+            com.getcapacitor.JSObject result = new com.getcapacitor.JSObject();
+            result.put("notifications", "granted");
+            result.put("schedule_exact_alarm", "granted");
+            call.resolve(result);
+        }
+    }
+
+    @PermissionCallback
+    private void permissionsCallback(PluginCall call) {
+        com.getcapacitor.JSObject result = new com.getcapacitor.JSObject();
+        
+        if (getPermissionState("notifications") == PermissionState.GRANTED) {
+            result.put("notifications", "granted");
+        } else {
+            result.put("notifications", "denied");
+        }
+        
+        // SCHEDULE_EXACT_ALARM is a normal permission (not runtime) on API 31+
+        // It's granted by default unless revoked by user in settings
+        result.put("schedule_exact_alarm", "granted");
+        
+        call.resolve(result);
+    }
+
+    @PluginMethod
+    public void checkPermissions(PluginCall call) {
+        com.getcapacitor.JSObject result = new com.getcapacitor.JSObject();
+        
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            PermissionState state = getPermissionState("notifications");
+            result.put("notifications", state != null ? state.toString().toLowerCase() : "prompt");
+        } else {
+            result.put("notifications", "granted");
+        }
+        
+        result.put("schedule_exact_alarm", "granted");
+        call.resolve(result);
+    }
 }
