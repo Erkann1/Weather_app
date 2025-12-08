@@ -47,13 +47,19 @@ public class AlarmPlugin extends Plugin {
         Intent intent = new Intent(context, AlarmReceiver.class);
         PendingIntent pendingIntent = PendingIntent.getBroadcast(context, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
 
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
-            alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerTime, pendingIntent);
+        // Use setAlarmClock for most reliable alarm - shows alarm icon in status bar
+        Intent showIntent = new Intent(context, MainActivity.class);
+        PendingIntent showPendingIntent = PendingIntent.getActivity(context, 0, showIntent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+        
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+            AlarmManager.AlarmClockInfo alarmClockInfo = new AlarmManager.AlarmClockInfo(triggerTime, showPendingIntent);
+            alarmManager.setAlarmClock(alarmClockInfo, pendingIntent);
+            Log.d("AlarmPlugin", "AlarmClock set for: " + triggerTime + " (" + new java.util.Date(triggerTime) + ")");
         } else {
             alarmManager.setExact(AlarmManager.RTC_WAKEUP, triggerTime, pendingIntent);
+            Log.d("AlarmPlugin", "Exact alarm set for: " + triggerTime);
         }
 
-        Log.d("AlarmPlugin", "Alarm set for: " + triggerTime);
         call.resolve();
     }
 
@@ -71,12 +77,32 @@ public class AlarmPlugin extends Plugin {
 
     @PluginMethod
     public void requestPermissions(PluginCall call) {
-        // Capacitor 4 uses the built-in requestPermissionForAlias
+        Log.d("AlarmPlugin", "requestPermissions called");
+        
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-            // Android 13+ needs POST_NOTIFICATIONS
-            requestPermissionForAlias("notifications", call, "permissionsCallback");
+            // Android 13+ needs POST_NOTIFICATIONS - use direct ActivityCompat
+            if (ContextCompat.checkSelfPermission(getContext(), Manifest.permission.POST_NOTIFICATIONS) 
+                    != PackageManager.PERMISSION_GRANTED) {
+                Log.d("AlarmPlugin", "Requesting POST_NOTIFICATIONS permission via ActivityCompat");
+                ActivityCompat.requestPermissions(
+                    getActivity(), 
+                    new String[] { Manifest.permission.POST_NOTIFICATIONS }, 
+                    100
+                );
+            } else {
+                Log.d("AlarmPlugin", "POST_NOTIFICATIONS already granted");
+            }
+            
+            // Return result
+            com.getcapacitor.JSObject result = new com.getcapacitor.JSObject();
+            boolean hasNotificationPerm = ContextCompat.checkSelfPermission(getContext(), Manifest.permission.POST_NOTIFICATIONS) 
+                    == PackageManager.PERMISSION_GRANTED;
+            result.put("notifications", hasNotificationPerm ? "granted" : "prompt");
+            result.put("schedule_exact_alarm", "granted");
+            call.resolve(result);
         } else {
             // Older Android versions don't need runtime permission for notifications
+            Log.d("AlarmPlugin", "Android < 13, no runtime permission needed");
             com.getcapacitor.JSObject result = new com.getcapacitor.JSObject();
             result.put("notifications", "granted");
             result.put("schedule_exact_alarm", "granted");
