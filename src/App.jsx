@@ -165,6 +165,9 @@ function App() {
   const isAnnouncingRef = useRef(false);
   const lastAnnounceTriggerRef = useRef(0);
 
+  // Permission status state
+  const [permissionStatus, setPermissionStatus] = useState('checking...');
+
   // Ayarları Kaydetme Effect'leri
   useEffect(() => { localStorage.setItem('targetTime', targetTime); }, [targetTime]);
   useEffect(() => { localStorage.setItem('selectedProvince', selectedProvince); }, [selectedProvince]);
@@ -172,30 +175,39 @@ function App() {
   useEffect(() => { localStorage.setItem('isSchedulerActive', isSchedulerActive); }, [isSchedulerActive]);
 
   // İzin isteme - Uygulama ilk açıldığında çalışır
-  useEffect(() => {
-    const requestNotificationPermissions = async () => {
+  const requestNotificationPermissions = useCallback(async () => {
+    try {
+      setPermissionStatus('İzin isteniyor...');
+      console.log("[PERMISSION] İzin isteniyor...");
+
+      // Önce AlarmPlugin'i dene
       try {
-        console.log("[PERMISSION] İzin isteniyor...");
         const permResult = await AlarmPlugin.requestPermissions();
         console.log("[PERMISSION] AlarmPlugin izin sonucu:", permResult);
+        setPermissionStatus(`AlarmPlugin: ${JSON.stringify(permResult)}`);
+      } catch (pluginError) {
+        console.error("[PERMISSION] AlarmPlugin hatası:", pluginError);
+        setPermissionStatus(`AlarmPlugin Hata: ${pluginError.message}`);
+      }
 
-        // Fallback olarak LocalNotifications da çağıralım
+      // Fallback olarak LocalNotifications da çağıralım
+      try {
         const localPerm = await LocalNotifications.requestPermissions();
         console.log("[PERMISSION] LocalNotifications izin sonucu:", localPerm);
-      } catch (e) {
-        console.error("[PERMISSION] İzin isteği hatası:", e);
-        // Fallback
-        try {
-          await LocalNotifications.requestPermissions();
-        } catch (e2) {
-          console.error("[PERMISSION] Fallback izin hatası:", e2);
-        }
+        setPermissionStatus(prev => `${prev} | LocalNotif: ${localPerm.display}`);
+      } catch (localError) {
+        console.error("[PERMISSION] LocalNotifications hatası:", localError);
       }
-    };
+    } catch (e) {
+      console.error("[PERMISSION] Genel hata:", e);
+      setPermissionStatus(`Hata: ${e.message}`);
+    }
+  }, []);
 
+  useEffect(() => {
     // Uygulama açılır açılmaz izin iste
     requestNotificationPermissions();
-  }, []); // Boş dependency array = sadece mount'ta çalışır
+  }, [requestNotificationPermissions]); // Dependency olarak ekle
 
   // İlçe değiştiğinde koordinatları bul
   useEffect(() => {
@@ -722,6 +734,18 @@ function App() {
             <Bell className="w-4 h-4 mr-2" />
             5 Saniye Sonra Test Et
           </button>
+
+          {/* İzin Durumu Debug */}
+          <div className="mt-4 p-3 bg-yellow-50 rounded-lg border border-yellow-200">
+            <p className="text-xs font-semibold text-yellow-800 mb-1">İzin Durumu (Debug):</p>
+            <p className="text-xs text-yellow-700 break-all">{permissionStatus}</p>
+            <button
+              onClick={requestNotificationPermissions}
+              className="mt-2 w-full px-3 py-1 text-xs bg-yellow-500 text-white rounded hover:bg-yellow-600"
+            >
+              İzinleri Yeniden İste
+            </button>
+          </div>
         </div>
       </div>
     );
