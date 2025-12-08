@@ -25,6 +25,7 @@ public class AlarmReceiver extends BroadcastReceiver {
                 PowerManager.ON_AFTER_RELEASE, "WeatherAnnounce:AlarmWakeLock");
         wakeLock.acquire(3000); // 3 saniye tut
 
+        // Create full screen intent with flags suggested by user + extras
         Intent fullScreenIntent = new Intent(context, MainActivity.class);
         fullScreenIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | 
                                   Intent.FLAG_ACTIVITY_CLEAR_TOP | 
@@ -32,11 +33,7 @@ public class AlarmReceiver extends BroadcastReceiver {
                                   Intent.FLAG_ACTIVITY_REORDER_TO_FRONT |
                                   Intent.FLAG_ACTIVITY_NO_USER_ACTION);
         
-        // Dismiss keyguard if possible
-        KeyguardManager keyguardManager = (KeyguardManager) context.getSystemService(Context.KEYGUARD_SERVICE);
-        if (keyguardManager != null && keyguardManager.isKeyguardLocked()) {
-            Log.d("AlarmReceiver", "Keyguard is locked, attempting to dismiss");
-        }
+        // Dismiss keyguard logic moved to MainActivity's onCreate/onWindowFocusChanged viasetShowWhenLocked
         
         PendingIntent fullScreenPendingIntent = PendingIntent.getActivity(context, 0,
                 fullScreenIntent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
@@ -46,10 +43,10 @@ public class AlarmReceiver extends BroadcastReceiver {
 
         NotificationCompat.Builder notificationBuilder = new NotificationCompat.Builder(context, channelId)
                 .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
-                .setContentTitle("Günaydın! ☀️")
-                .setContentText("Hava durumu için dokunun.")
-                .setPriority(NotificationCompat.PRIORITY_MAX)
-                .setCategory(NotificationCompat.CATEGORY_ALARM)
+                .setContentTitle("Gelen Arama") // As requested by user snippet style
+                .setContentText("Hava Durumu Anonsu")
+                .setPriority(NotificationCompat.PRIORITY_MAX) // High priority
+                .setCategory(NotificationCompat.CATEGORY_CALL) // Crucial for full screen override
                 .setFullScreenIntent(fullScreenPendingIntent, true)
                 .setAutoCancel(true)
                 .setVisibility(NotificationCompat.VISIBILITY_PUBLIC);
@@ -57,7 +54,7 @@ public class AlarmReceiver extends BroadcastReceiver {
         NotificationManager notificationManager = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
         notificationManager.notify(1, notificationBuilder.build());
         
-        // Force launch activity for good measure
+        // Also force start activity directly (redundant but helpful)
         context.startActivity(fullScreenIntent);
         
         // Cancel the notification after a short delay to satisfy "I don't want notification" request
