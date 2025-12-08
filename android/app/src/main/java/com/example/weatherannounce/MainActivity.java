@@ -7,6 +7,7 @@ import com.getcapacitor.BridgeActivity;
 public class MainActivity extends BridgeActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
+        registerPlugin(AlarmPlugin.class);
         super.onCreate(savedInstanceState);
 
         // Ekranı uyandırma ve kilit ekranında gösterme ayarları
@@ -14,8 +15,6 @@ public class MainActivity extends BridgeActivity {
                 WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD |
                 WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED |
                 WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON);
-
-        registerPlugin(AlarmPlugin.class);
     }
 
     @Override
