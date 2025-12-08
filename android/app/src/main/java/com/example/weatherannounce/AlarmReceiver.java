@@ -10,6 +10,8 @@ import android.os.Build;
 import androidx.core.app.NotificationCompat;
 import android.util.Log;
 import android.os.PowerManager;
+import android.app.KeyguardManager;
+import android.view.WindowManager;
 
 public class AlarmReceiver extends BroadcastReceiver {
     @Override
@@ -27,7 +29,14 @@ public class AlarmReceiver extends BroadcastReceiver {
         fullScreenIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | 
                                   Intent.FLAG_ACTIVITY_CLEAR_TOP | 
                                   Intent.FLAG_ACTIVITY_SINGLE_TOP | 
-                                  Intent.FLAG_ACTIVITY_REORDER_TO_FRONT);
+                                  Intent.FLAG_ACTIVITY_REORDER_TO_FRONT |
+                                  Intent.FLAG_ACTIVITY_NO_USER_ACTION);
+        
+        // Dismiss keyguard if possible
+        KeyguardManager keyguardManager = (KeyguardManager) context.getSystemService(Context.KEYGUARD_SERVICE);
+        if (keyguardManager != null && keyguardManager.isKeyguardLocked()) {
+            Log.d("AlarmReceiver", "Keyguard is locked, attempting to dismiss");
+        }
         
         PendingIntent fullScreenPendingIntent = PendingIntent.getActivity(context, 0,
                 fullScreenIntent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);

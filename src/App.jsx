@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { RefreshCcw, Bell, CloudRain, Sun, Zap, Sunrise, ToggleLeft, ToggleRight, AlertTriangle } from 'lucide-react';
 import { CapacitorForegroundService } from 'capacitor-foreground-service';
 import { LocalNotifications } from '@capacitor/local-notifications';
@@ -161,6 +161,10 @@ function App() {
   // isSchedulerActive varsayılan olarak false olsun, kullanıcı açsın.
   const [isSchedulerActive, setIsSchedulerActive] = useState(() => localStorage.getItem('isSchedulerActive') === 'true');
 
+  // Global announcement lock to prevent multiple triggers
+  const isAnnouncingRef = useRef(false);
+  const lastAnnounceTriggerRef = useRef(0);
+
   // Ayarları Kaydetme Effect'leri
   useEffect(() => { localStorage.setItem('targetTime', targetTime); }, [targetTime]);
   useEffect(() => { localStorage.setItem('selectedProvince', selectedProvince); }, [selectedProvince]);
@@ -206,6 +210,22 @@ function App() {
 
   // Hava durumu API çağrısı
   const fetchWeather = useCallback(async (shouldAnnounce = true) => {
+    // Check for announcement lock - prevent multiple simultaneous triggers
+    const now = Date.now();
+    if (shouldAnnounce) {
+      if (isAnnouncingRef.current) {
+        console.log("[GUARD] Anons zaten devam ediyor, atlanıyor.");
+        return;
+      }
+      // Prevent triggers within 60 seconds of each other
+      if (now - lastAnnounceTriggerRef.current < 60000) {
+        console.log("[GUARD] Son 60 saniye içinde anons yapıldı, atlanıyor.");
+        return;
+      }
+      isAnnouncingRef.current = true;
+      lastAnnounceTriggerRef.current = now;
+    }
+
     setIsLoading(true);
     if (shouldAnnounce) {
       setStatusMessage(`${selectedDistrict} için hava durumu verileri çekiliyor...`);
@@ -359,11 +379,17 @@ function App() {
           audio.play().then(() => {
             // Oynatma başarılı.
             setStatusMessage("Sesli anons hazır ve otomatik çalıyor.");
-            audio.onended = () => console.log("Anons tamamlandı. Tekrar etmeyecektir.");
+            audio.onended = () => {
+              console.log("Anons tamamlandı. Tekrar etmeyecektir.");
+              // Release the lock after audio finishes
+              isAnnouncingRef.current = false;
+            };
           }).catch(error => {
             // Oynatma engellendi. Kullanıcıya manuel başlatması gerektiğini söyle.
             console.error("Oynatma engellendi:", error);
             setStatusMessage("Sesli anons hazır! Oynat düğmesine basarak dinleyebilirsiniz.");
+            // Release lock even if playback was blocked (user might manually play)
+            isAnnouncingRef.current = false;
           });
 
           setLastAnnounceTime(new Date().toLocaleTimeString('tr-TR'));
@@ -383,6 +409,7 @@ function App() {
         } else {
           setStatusMessage(`Hata: Sesli anons oluşturulamadı. Lütfen konsolu kontrol edin. (${error.message})`);
           setIsLoading(false);
+          if (shouldAnnounce) isAnnouncingRef.current = false;
         }
       }
     }
@@ -479,12 +506,12 @@ function App() {
     };
     scheduleNotification();
 
-    // Bildirime tıklanınca çalışacak listener
-    LocalNotifications.addListener('localNotificationActionPerformed', async (notification) => {
-      console.log("Bildirime tıklandı!", notification);
-      // Uygulama açılınca hemen hava durumunu çek ve oku
-      fetchWeather(true);
-    });
+    // Bildirime tıklanınca çalışacak listener - DEVRE DIŞI BIRAKIYORUZ
+    // checkTimeAndAnnounce zaten bunu yapacak
+    // LocalNotifications.addListener('localNotificationActionPerformed', async (notification) => {
+    //   console.log("Bildirime tıklandı!", notification);
+    //   fetchWeather(true);
+    // });
 
     const checkTimeAndAnnounce = () => {
       const now = new Date();
