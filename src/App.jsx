@@ -5,7 +5,17 @@ import { LocalNotifications } from '@capacitor/local-notifications';
 import { App as CapacitorApp } from '@capacitor/app';
 import { registerPlugin } from '@capacitor/core';
 
-const AlarmPlugin = registerPlugin('AlarmPlugin');
+// AlarmPlugin custom native plugin - sıkıntılı, sadece LocalNotifications kullanacağız
+// const AlarmPlugin = registerPlugin('AlarmPlugin');
+const AlarmPlugin = {
+  requestPermissions: async () => {
+    // Fallback - sadece LocalNotifications kullan
+    const result = await LocalNotifications.requestPermissions();
+    return { notifications: result.display, schedule_exact_alarm: 'granted' };
+  },
+  setAlarm: async () => { console.log('[AlarmPlugin] setAlarm - LocalNotifications kullanılacak'); },
+  cancelAlarm: async () => { console.log('[AlarmPlugin] cancelAlarm - LocalNotifications kullanılacak'); }
+};
 
 import { TURKEY_LOCATIONS } from './data/turkey_locations';
 
@@ -515,14 +525,11 @@ function App() {
           scheduleDate.setDate(scheduleDate.getDate() + 1);
         }
 
-        // Mevcut bildirimleri temizle (LocalNotification yedeği)
+        // Mevcut bildirimleri temizle
         await LocalNotifications.cancel({ notifications: [{ id: 1 }] });
-        // Native Alarmı iptal et (Önceki varsa)
-        await AlarmPlugin.cancelAlarm();
 
-        // Yeni Native Alarm kur
-        await AlarmPlugin.setAlarm({ timestamp: scheduleDate.getTime() });
-        console.log(`[ALARM] Native Alarm kuruldu: ${scheduleDate.toLocaleString()}`);
+        // Local Notification ile alarm kur (AlarmPlugin çalışmadığı için sadece bu kullanılıyor)
+        console.log(`[ALARM] LocalNotifications ile alarm kuruluyor: ${scheduleDate.toLocaleString()}`);
 
         // Yedek olarak Local Notification da kalsın (Ekranda görünmesi için)
         await LocalNotifications.schedule({
@@ -540,16 +547,17 @@ function App() {
 
       } catch (e) {
         console.error("Bildirim kurma hatası:", e);
+        setStatusMessage(`Bildirim kurma hatası: ${e.message}`);
       }
     };
     scheduleNotification();
 
-    // Bildirime tıklanınca çalışacak listener - DEVRE DIŞI BIRAKIYORUZ
-    // checkTimeAndAnnounce zaten bunu yapacak
-    // LocalNotifications.addListener('localNotificationActionPerformed', async (notification) => {
-    //   console.log("Bildirime tıklandı!", notification);
-    //   fetchWeather(true);
-    // });
+    // Bildirime tıklanınca veya bildirim geldiğinde çalışacak listener
+    const notifListener = LocalNotifications.addListener('localNotificationActionPerformed', async (notification) => {
+      console.log("Bildirime tıklandı!", notification);
+      // Uygulama açılınca hemen hava durumunu çek ve oku
+      fetchWeather(true);
+    });
 
     const checkTimeAndAnnounce = () => {
       const now = new Date();
