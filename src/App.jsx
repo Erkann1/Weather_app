@@ -171,6 +171,32 @@ function App() {
   useEffect(() => { localStorage.setItem('selectedDistrict', selectedDistrict); }, [selectedDistrict]);
   useEffect(() => { localStorage.setItem('isSchedulerActive', isSchedulerActive); }, [isSchedulerActive]);
 
+  // İzin isteme - Uygulama ilk açıldığında çalışır
+  useEffect(() => {
+    const requestNotificationPermissions = async () => {
+      try {
+        console.log("[PERMISSION] İzin isteniyor...");
+        const permResult = await AlarmPlugin.requestPermissions();
+        console.log("[PERMISSION] AlarmPlugin izin sonucu:", permResult);
+
+        // Fallback olarak LocalNotifications da çağıralım
+        const localPerm = await LocalNotifications.requestPermissions();
+        console.log("[PERMISSION] LocalNotifications izin sonucu:", localPerm);
+      } catch (e) {
+        console.error("[PERMISSION] İzin isteği hatası:", e);
+        // Fallback
+        try {
+          await LocalNotifications.requestPermissions();
+        } catch (e2) {
+          console.error("[PERMISSION] Fallback izin hatası:", e2);
+        }
+      }
+    };
+
+    // Uygulama açılır açılmaz izin iste
+    requestNotificationPermissions();
+  }, []); // Boş dependency array = sadece mount'ta çalışır
+
   // İlçe değiştiğinde koordinatları bul
   useEffect(() => {
     const fetchCoordinates = async () => {
