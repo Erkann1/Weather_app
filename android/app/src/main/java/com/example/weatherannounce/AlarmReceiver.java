@@ -16,57 +16,82 @@ import android.view.WindowManager;
 public class AlarmReceiver extends BroadcastReceiver {
     @Override
     public void onReceive(Context context, Intent intent) {
-        Log.d("AlarmReceiver", "Alarm triggered!");
+        Log.d("AlarmReceiver", "========== ALARM TRIGGERED ==========");
 
-        // WakeLock al
         PowerManager powerManager = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
-        PowerManager.WakeLock wakeLock = powerManager.newWakeLock(PowerManager.FULL_WAKE_LOCK |
-                PowerManager.ACQUIRE_CAUSES_WAKEUP |
-                PowerManager.ON_AFTER_RELEASE, "WeatherAnnounce:AlarmWakeLock");
-        wakeLock.acquire(3000); // 3 saniye tut
+        
+        // Acquire FULL_WAKE_LOCK with screen bright - hold for 60 seconds to ensure screen stays on
+        PowerManager.WakeLock wakeLock = powerManager.newWakeLock(
+                PowerManager.FULL_WAKE_LOCK | 
+                PowerManager.ACQUIRE_CAUSES_WAKEUP | 
+                PowerManager.ON_AFTER_RELEASE | 
+                PowerManager.SCREEN_BRIGHT_WAKE_LOCK,
+                "WeatherAnnounce:AlarmWakeLock"
+        );
+        wakeLock.acquire(60000); // Hold for 60 seconds
+        Log.d("AlarmReceiver", "WakeLock acquired for 60 seconds");
 
-        // Create full screen intent with flags suggested by user + extras
+        // Additional: Try to wake screen directly if supported
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT_WATCH) {
+                if (!powerManager.isInteractive()) {
+                    Log.d("AlarmReceiver", "Screen is OFF, attempting to turn ON");
+                    // WakeLock with ACQUIRE_CAUSES_WAKEUP should handle this
+                } else {
+                    Log.d("AlarmReceiver", "Screen is already ON");
+                }
+            }
+        } catch (Exception e) {
+            Log.e("AlarmReceiver", "Error checking screen state", e);
+        }
+
+        // Create full screen intent
         Intent fullScreenIntent = new Intent(context, MainActivity.class);
-        fullScreenIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | 
-                                  Intent.FLAG_ACTIVITY_CLEAR_TOP | 
-                                  Intent.FLAG_ACTIVITY_SINGLE_TOP | 
-                                  Intent.FLAG_ACTIVITY_REORDER_TO_FRONT |
-                                  Intent.FLAG_ACTIVITY_NO_USER_ACTION);
+        fullScreenIntent.addFlags(
+                Intent.FLAG_ACTIVITY_NEW_TASK | 
+                Intent.FLAG_ACTIVITY_CLEAR_TOP | 
+                Intent.FLAG_ACTIVITY_SINGLE_TOP | 
+                Intent.FLAG_ACTIVITY_REORDER_TO_FRONT |
+                Intent.FLAG_ACTIVITY_NO_USER_ACTION |
+                Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS
+        );
+        fullScreenIntent.putExtra("FROM_ALARM", true);
+        Log.d("AlarmReceiver", "Launching MainActivity");
         
-        // Dismiss keyguard logic moved to MainActivity's onCreate/onWindowFocusChanged viasetShowWhenLocked
-        
-        PendingIntent fullScreenPendingIntent = PendingIntent.getActivity(context, 0,
-                fullScreenIntent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+        PendingIntent fullScreenPendingIntent = PendingIntent.getActivity(
+                context, 
+                0,
+                fullScreenIntent, 
+                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
+        );
 
         String channelId = "alarm_channel";
         createNotificationChannel(context, channelId);
 
         NotificationCompat.Builder notificationBuilder = new NotificationCompat.Builder(context, channelId)
                 .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
-                .setContentTitle("Gelen Arama") // As requested by user snippet style
+                .setContentTitle("Gelen Arama")
                 .setContentText("Hava Durumu Anonsu")
-                .setPriority(NotificationCompat.PRIORITY_MAX) // High priority
-                .setCategory(NotificationCompat.CATEGORY_CALL) // Crucial for full screen override
+                .setPriority(NotificationCompat.PRIORITY_MAX)
+                .setCategory(NotificationCompat.CATEGORY_CALL) // Critical for bypassing DND
                 .setFullScreenIntent(fullScreenPendingIntent, true)
                 .setAutoCancel(true)
+                .setOngoing(false)
                 .setVisibility(NotificationCompat.VISIBILITY_PUBLIC);
 
         NotificationManager notificationManager = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
         notificationManager.notify(1, notificationBuilder.build());
+        Log.d("AlarmReceiver", "Notification posted with full screen intent");
         
-        // Also force start activity directly (redundant but helpful)
-        context.startActivity(fullScreenIntent);
-        
-        // Cancel the notification after a short delay to satisfy "I don't want notification" request
-        // We need the notification momentarily for the FullScreenIntent to work on locked screens
+        // Force start activity directly (this should work even when screen is off)
         try {
-            // Need a handler or just let the activity cancel it onResume
-            // Ideally, MainActivity should cancel it. 
-            // But let's verify if we can cancel it here without killing the FullScreenIntent launch.
-            // Safe bet: Let MainActivity cancel it.
+            context.startActivity(fullScreenIntent);
+            Log.d("AlarmReceiver", "Activity launch initiated");
         } catch (Exception e) {
-            Log.e("AlarmReceiver", "Error cancelling notification", e);
+            Log.e("AlarmReceiver", "Failed to launch activity", e);
         }
+        
+        Log.d("AlarmReceiver", "========== ALARM PROCESSING COMPLETE ==========");
     }
 
     private void createNotificationChannel(Context context, String channelId) {
