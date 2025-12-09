@@ -80,6 +80,24 @@ public class MainActivity extends BridgeActivity {
             
             Context context = getContext();
             AlarmManager alarmManager = (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
+            
+            // Android 12+ (API 31+) requires SCHEDULE_EXACT_ALARM permission
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+                if (!alarmManager.canScheduleExactAlarms()) {
+                    Log.e("AlarmPlugin", "SCHEDULE_EXACT_ALARM permission not granted!");
+                    // Open settings to let user grant permission
+                    try {
+                        Intent intent = new Intent(android.provider.Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM);
+                        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                        context.startActivity(intent);
+                    } catch (Exception e) {
+                        Log.e("AlarmPlugin", "Failed to open settings", e);
+                    }
+                    call.reject("SCHEDULE_EXACT_ALARM izni gerekli. Lütfen ayarlardan 'Alarmlar ve hatırlatıcılar' iznini verin.");
+                    return;
+                }
+            }
+            
             Intent intent = new Intent(context, AlarmReceiver.class);
             PendingIntent pendingIntent = PendingIntent.getBroadcast(context, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
 
@@ -91,9 +109,10 @@ public class MainActivity extends BridgeActivity {
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
                 AlarmManager.AlarmClockInfo alarmClockInfo = new AlarmManager.AlarmClockInfo(triggerTime, showPendingIntent);
                 alarmManager.setAlarmClock(alarmClockInfo, pendingIntent);
-                Log.d("AlarmPlugin", "AlarmClock set for: " + triggerTime);
+                Log.d("AlarmPlugin", "✓ AlarmClock set for: " + new java.util.Date(triggerTime));
             } else {
                 alarmManager.setExact(AlarmManager.RTC_WAKEUP, triggerTime, pendingIntent);
+                Log.d("AlarmPlugin", "✓ Exact alarm set for: " + new java.util.Date(triggerTime));
             }
 
             call.resolve();

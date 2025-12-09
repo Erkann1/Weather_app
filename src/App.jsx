@@ -521,11 +521,17 @@ function App() {
         await LocalNotifications.cancel({ notifications: [{ id: 1 }] });
 
         // Native Alarm kur
-        console.log(`[ALARM] Native Alarm kuruldu: ${scheduleDate.toLocaleString()}`);
-        await AlarmPlugin.setAlarm({ timestamp: scheduleDate.getTime() });
+        console.log(`[ALARM] Alarm kuruluyor: ${scheduleDate.toLocaleString()} (${scheduleDate.getTime()})`);
 
-        // Kullanıcı "Bildirim İstemiyorum" dediği için LocalNotification kurmuyoruz.
-        // AlarmPlugin native tarafında AlarmReceiver -> MainActivity başlatacak.
+        try {
+          await AlarmPlugin.setAlarm({ timestamp: scheduleDate.getTime() });
+          console.log('[ALARM] ✓ Alarm başarıyla kuruldu');
+          setStatusMessage(`✓ Alarm ${targetTime} için kuruldu`);
+        } catch (alarmError) {
+          console.error('[ALARM] ✗ Alarm kurma hatası:', alarmError);
+          setStatusMessage(`✗ ALARM HATASI: ${alarmError.message || alarmError}. Lütfen Ayarlar > Uygulamalar > Hava Durumu > İzinler > Alarmlar ve hatırlatıcılar iznini kontrol edin.`);
+          throw alarmError;
+        }
 
       } catch (e) {
         console.error("Bildirim kurma hatası:", e);
